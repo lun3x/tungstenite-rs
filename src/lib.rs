@@ -26,7 +26,7 @@ pub mod protocol;
 mod server;
 pub mod stream;
 #[cfg(any(feature = "native-tls", feature = "__rustls-tls"))]
-mod tls;
+pub mod tls;
 pub mod util;
 
 const READ_BUFFER_CHUNK_SIZE: usize = 4096;
