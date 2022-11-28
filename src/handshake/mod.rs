@@ -9,13 +9,22 @@ mod machine;
 use std::{
     error::Error as ErrorTrait,
     fmt,
-    io::{Read, Write},
+    io::{Cursor, Read, Write},
 };
 
 use sha1::{Digest, Sha1};
 
 use self::machine::{HandshakeMachine, RoundResult, StageResult, TryParse};
-use crate::error::Error;
+use crate::{error::Error, ReadBuffer};
+
+/// The handshake state.
+#[derive(Debug)]
+pub enum HandshakeState {
+    /// Reading data from the peer.
+    Reading(ReadBuffer),
+    /// Sending data to the peer.
+    Writing(Cursor<Vec<u8>>),
+}
 
 /// A WebSocket handshake.
 #[derive(Debug)]
