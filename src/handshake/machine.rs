@@ -11,53 +11,44 @@ use crate::{
 
 /// A generic handshake state machine.
 #[derive(Debug)]
-pub struct HandshakeMachine<Stream> {
-    stream: Stream,
+pub struct NonOwningHandshakeMachine {
     state: HandshakeState,
 }
 
-impl<Stream> HandshakeMachine<Stream> {
+impl NonOwningHandshakeMachine {
     /// Start reading data from the peer.
-    pub fn start_read(stream: Stream) -> Self {
-        HandshakeMachine { stream, state: HandshakeState::Reading(ReadBuffer::new()) }
+    pub fn start_read() -> Self {
+        NonOwningHandshakeMachine { state: HandshakeState::Reading(ReadBuffer::new()) }
     }
     /// Start writing data to the peer.
-    pub fn start_write<D: Into<Vec<u8>>>(stream: Stream, data: D) -> Self {
-        HandshakeMachine { stream, state: HandshakeState::Writing(Cursor::new(data.into())) }
+    pub fn start_write<D: Into<Vec<u8>>>(data: D) -> Self {
+        NonOwningHandshakeMachine { state: HandshakeState::Writing(Cursor::new(data.into())) }
     }
-    /// Returns a shared reference to the inner stream.
-    pub fn get_ref(&self) -> &Stream {
-        &self.stream
-    }
-    /// Returns a mutable reference to the inner stream.
-    pub fn get_mut(&mut self) -> &mut Stream {
-        &mut self.stream
-    }
-}
 
-impl<Stream: Read + Write> HandshakeMachine<Stream> {
     /// Perform a single handshake round.
-    pub fn single_round<Obj: TryParse>(mut self) -> Result<RoundResult<Obj, Stream>> {
+    pub fn single_round<Obj: TryParse, Stream: Read + Write>(
+        self,
+        stream: &mut Stream,
+    ) -> Result<RoundResult<Obj>> {
         trace!("Doing handshake round.");
         match self.state {
             HandshakeState::Reading(mut buf) => {
-                let read = buf.read_from(&mut self.stream).no_block()?;
+                let read = buf.read_from(stream).no_block()?;
                 match read {
                     Some(0) => Err(Error::Protocol(ProtocolError::HandshakeIncomplete)),
                     Some(_) => Ok(if let Some((size, obj)) = Obj::try_parse(Buf::chunk(&buf))? {
                         buf.advance(size);
                         RoundResult::StageFinished(StageResult::DoneReading {
                             result: obj,
-                            stream: self.stream,
                             tail: buf.into_vec(),
                         })
                     } else {
-                        RoundResult::Incomplete(HandshakeMachine {
+                        RoundResult::Incomplete(NonOwningHandshakeMachine {
                             state: HandshakeState::Reading(buf),
                             ..self
                         })
                     }),
-                    None => Ok(RoundResult::WouldBlock(HandshakeMachine {
+                    None => Ok(RoundResult::WouldBlock(NonOwningHandshakeMachine {
                         state: HandshakeState::Reading(buf),
                         ..self
                     })),
@@ -65,19 +56,19 @@ impl<Stream: Read + Write> HandshakeMachine<Stream> {
             }
             HandshakeState::Writing(mut buf) => {
                 assert!(buf.has_remaining());
-                if let Some(size) = self.stream.write(Buf::chunk(&buf)).no_block()? {
+                if let Some(size) = stream.write(Buf::chunk(&buf)).no_block()? {
                     assert!(size > 0);
                     buf.advance(size);
                     Ok(if buf.has_remaining() {
-                        RoundResult::Incomplete(HandshakeMachine {
+                        RoundResult::Incomplete(NonOwningHandshakeMachine {
                             state: HandshakeState::Writing(buf),
                             ..self
                         })
                     } else {
-                        RoundResult::StageFinished(StageResult::DoneWriting(self.stream))
+                        RoundResult::StageFinished(StageResult::DoneWriting)
                     })
                 } else {
-                    Ok(RoundResult::WouldBlock(HandshakeMachine {
+                    Ok(RoundResult::WouldBlock(NonOwningHandshakeMachine {
                         state: HandshakeState::Writing(buf),
                         ..self
                     }))
@@ -89,22 +80,22 @@ impl<Stream: Read + Write> HandshakeMachine<Stream> {
 
 /// The result of the round.
 #[derive(Debug)]
-pub enum RoundResult<Obj, Stream> {
+pub enum RoundResult<Obj> {
     /// Round not done, I/O would block.
-    WouldBlock(HandshakeMachine<Stream>),
+    WouldBlock(NonOwningHandshakeMachine),
     /// Round done, state unchanged.
-    Incomplete(HandshakeMachine<Stream>),
+    Incomplete(NonOwningHandshakeMachine),
     /// Stage complete.
-    StageFinished(StageResult<Obj, Stream>),
+    StageFinished(StageResult<Obj>),
 }
 
 /// The result of the stage.
 #[derive(Debug)]
-pub enum StageResult<Obj, Stream> {
+pub enum StageResult<Obj> {
     /// Reading round finished.
-    DoneReading { result: Obj, stream: Stream, tail: Vec<u8> },
+    DoneReading { result: Obj, tail: Vec<u8> },
     /// Writing round finished.
-    DoneWriting(Stream),
+    DoneWriting,
 }
 
 /// The parseable object.
