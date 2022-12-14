@@ -88,7 +88,16 @@ impl<Stream> WebSocket<Stream> {
     /// or together with an existing one. If you need an initial handshake, use
     /// `connect()` or `accept()` functions of the crate to construct a websocket.
     pub fn from_raw_socket(stream: Stream, role: Role, config: Option<WebSocketConfig>) -> Self {
-        WebSocket { socket: stream, context: WebSocketContext::new(role, config) }
+        WebSocket::from_context(stream, WebSocketContext::new(role, config))
+    }
+
+    /// Convert a raw socket into a WebSocket without performing a handshake.
+    ///
+    /// Call this function if you're using Tungstenite as a part of a web framework
+    /// or together with an existing one. If you need an initial handshake, use
+    /// `connect()` or `accept()` functions of the crate to construct a websocket.
+    pub fn from_context(stream: Stream, context: WebSocketContext) -> Self {
+        WebSocket { socket: stream, context }
     }
 
     /// Convert a raw socket into a WebSocket without performing a handshake.

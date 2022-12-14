@@ -6,7 +6,7 @@ use std::{
 use log::*;
 use tungstenite::{accept, handshake::HandshakeRole, Error, HandshakeError, Message, Result};
 
-fn must_not_block<Role: HandshakeRole>(err: HandshakeError<Role>) -> Error {
+fn must_not_block<Role: HandshakeRole, S>(err: HandshakeError<Role, S>) -> Error {
     match err {
         HandshakeError::Interrupted(_) => panic!("Bug: blocking socket would block"),
         HandshakeError::Failure(f) => f,

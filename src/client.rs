@@ -12,8 +12,11 @@ use log::*;
 use url::Url;
 
 use crate::{
-    handshake::client::{generate_key, Request, Response},
-    protocol::WebSocketConfig,
+    handshake::{
+        client::{generate_key, Request, Response},
+        NonOwningHandshakeError,
+    },
+    protocol::{Role, WebSocketConfig, WebSocketContext},
     stream::MaybeTlsStream,
 };
 
@@ -152,14 +155,39 @@ pub fn uri_mode(uri: &Uri) -> Result<Mode> {
 /// Any stream supporting `Read + Write` will do.
 pub fn client_with_config<Stream, Req>(
     request: Req,
-    stream: Stream,
+    mut stream: Stream,
     config: Option<WebSocketConfig>,
-) -> StdResult<(WebSocket<Stream>, Response), HandshakeError<ClientHandshake<Stream>>>
+) -> StdResult<(WebSocket<Stream>, Response), HandshakeError<ClientHandshake, Stream>>
 where
     Stream: Read + Write,
     Req: IntoClientRequest,
 {
-    ClientHandshake::start(stream, request.into_client_request()?, config)?.handshake()
+    match client_context_with_config(request, &mut stream, config) {
+        Ok((context, resp)) => Ok((WebSocket::from_context(stream, context), resp)),
+        Err(e) => Err(HandshakeError::from_non_owning(e, stream)),
+    }
+}
+
+/// Do the client handshake over the given stream given a web socket configuration. Passing `None`
+/// as configuration is equal to calling `client()` function.
+///
+/// Use this function if you need a nonblocking and non-owning handshake support or if you
+/// want to use a custom stream like `mio::net::TcpStream` or `openssl::ssl::SslStream`.
+/// Any stream supporting `Read + Write` will do.
+pub fn client_context_with_config<Stream, Req>(
+    request: Req,
+    stream: &mut Stream,
+    config: Option<WebSocketConfig>,
+) -> StdResult<(WebSocketContext, Response), NonOwningHandshakeError<ClientHandshake>>
+where
+    Stream: Read + Write,
+    Req: IntoClientRequest,
+{
+    ClientHandshake::non_owning_start(request.into_client_request()?, config)?
+        .handshake(stream)
+        .map(|(config, tail, resp)| {
+            (WebSocketContext::from_partially_read(tail, Role::Client, config), resp)
+        })
 }
 
 /// Do the client handshake over the given stream.
@@ -170,7 +198,7 @@ where
 pub fn client<Stream, Req>(
     request: Req,
     stream: Stream,
-) -> StdResult<(WebSocket<Stream>, Response), HandshakeError<ClientHandshake<Stream>>>
+) -> StdResult<(WebSocket<Stream>, Response), HandshakeError<ClientHandshake, Stream>>
 where
     Stream: Read + Write,
     Req: IntoClientRequest,

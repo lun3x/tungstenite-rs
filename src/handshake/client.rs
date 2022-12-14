@@ -1,9 +1,6 @@
 //! Client handshake machine.
 
-use std::{
-    io::{Read, Write},
-    marker::PhantomData,
-};
+use std::io::{Read, Write};
 
 use http::{
     header::HeaderName, HeaderMap, Request as HttpRequest, Response as HttpResponse, StatusCode,
@@ -19,7 +16,8 @@ use super::{
 };
 use crate::{
     error::{Error, ProtocolError, Result, UrlError},
-    protocol::{Role, WebSocket, WebSocketConfig},
+    handshake::NonOwningMidHandshake,
+    protocol::WebSocketConfig,
 };
 
 /// Client request type.
@@ -30,19 +28,18 @@ pub type Response = HttpResponse<Option<Vec<u8>>>;
 
 /// Client handshake role.
 #[derive(Debug)]
-pub struct ClientHandshake<S> {
+pub struct ClientHandshake {
     verify_data: VerifyData,
     config: Option<WebSocketConfig>,
-    _marker: PhantomData<S>,
 }
 
-impl<S: Read + Write> ClientHandshake<S> {
+impl ClientHandshake {
     /// Initiate a client handshake.
-    pub fn start(
+    pub fn start<S: Read + Write>(
         stream: S,
         request: Request,
         config: Option<WebSocketConfig>,
-    ) -> Result<MidHandshake<Self>> {
+    ) -> Result<MidHandshake<Self, S>> {
         if request.method() != http::Method::GET {
             return Err(Error::Protocol(ProtocolError::WrongHttpMethod));
         }
@@ -58,44 +55,70 @@ impl<S: Read + Write> ClientHandshake<S> {
         // Also extract the key from it (it must be present in a correct request).
         let (request, key) = generate_request(request)?;
 
-        let machine = HandshakeMachine::start_write(stream, request);
+        let machine = HandshakeMachine::start_write(request);
 
         let client = {
             let accept_key = derive_accept_key(key.as_ref());
-            ClientHandshake { verify_data: VerifyData { accept_key }, config, _marker: PhantomData }
+            ClientHandshake { verify_data: VerifyData { accept_key }, config }
         };
 
         trace!("Client handshake initiated.");
-        Ok(MidHandshake { role: client, machine })
+        Ok(MidHandshake { role: client, machine, stream })
+    }
+
+    /// TODO
+    pub fn non_owning_start(
+        request: Request,
+        config: Option<WebSocketConfig>,
+    ) -> Result<NonOwningMidHandshake<Self>> {
+        if request.method() != http::Method::GET {
+            return Err(Error::Protocol(ProtocolError::WrongHttpMethod));
+        }
+
+        if request.version() < http::Version::HTTP_11 {
+            return Err(Error::Protocol(ProtocolError::WrongHttpVersion));
+        }
+
+        // Check the URI scheme: only ws or wss are supported
+        let _ = crate::client::uri_mode(request.uri())?;
+
+        // Convert and verify the `http::Request` and turn it into the request as per RFC.
+        // Also extract the key from it (it must be present in a correct request).
+        let (request, key) = generate_request(request)?;
+
+        let machine = HandshakeMachine::start_write(request);
+
+        let client = {
+            let accept_key = derive_accept_key(key.as_ref());
+            ClientHandshake { verify_data: VerifyData { accept_key }, config }
+        };
+
+        trace!("Client handshake initiated.");
+        Ok(NonOwningMidHandshake { role: client, machine })
     }
 }
 
-impl<S: Read + Write> HandshakeRole for ClientHandshake<S> {
+impl HandshakeRole for ClientHandshake {
     type IncomingData = Response;
-    type InternalStream = S;
-    type FinalResult = (WebSocket<S>, Response);
+    type FinalResult = (Option<WebSocketConfig>, Vec<u8>, Response);
     fn stage_finished(
         &mut self,
-        finish: StageResult<Self::IncomingData, Self::InternalStream>,
-    ) -> Result<ProcessingResult<Self::InternalStream, Self::FinalResult>> {
+        finish: StageResult<Self::IncomingData>,
+    ) -> Result<ProcessingResult<Self::FinalResult>> {
         Ok(match finish {
-            StageResult::DoneWriting(stream) => {
-                ProcessingResult::Continue(HandshakeMachine::start_read(stream))
-            }
-            StageResult::DoneReading { stream, result, tail } => {
+            StageResult::DoneWriting => ProcessingResult::Continue(HandshakeMachine::start_read()),
+            StageResult::DoneReading { result, tail } => {
                 let result = match self.verify_data.verify_response(result) {
                     Ok(r) => r,
                     Err(Error::Http(mut e)) => {
                         *e.body_mut() = Some(tail);
-                        return Err(Error::Http(e))
-                    },
+                        return Err(Error::Http(e));
+                    }
                     Err(e) => return Err(e),
                 };
 
                 debug!("Client handshake done.");
-                let websocket =
-                    WebSocket::from_partially_read(stream, tail, Role::Client, self.config);
-                ProcessingResult::Done((websocket, result))
+                ProcessingResult::Done((self.config, tail, result))
             }
         })
     }

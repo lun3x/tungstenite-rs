@@ -11,18 +11,18 @@ use crate::{
 
 /// A generic handshake state machine.
 #[derive(Debug)]
-pub struct NonOwningHandshakeMachine {
+pub struct HandshakeMachine {
     state: HandshakeState,
 }
 
-impl NonOwningHandshakeMachine {
+impl HandshakeMachine {
     /// Start reading data from the peer.
     pub fn start_read() -> Self {
-        NonOwningHandshakeMachine { state: HandshakeState::Reading(ReadBuffer::new()) }
+        HandshakeMachine { state: HandshakeState::Reading(ReadBuffer::new()) }
     }
     /// Start writing data to the peer.
     pub fn start_write<D: Into<Vec<u8>>>(data: D) -> Self {
-        NonOwningHandshakeMachine { state: HandshakeState::Writing(Cursor::new(data.into())) }
+        HandshakeMachine { state: HandshakeState::Writing(Cursor::new(data.into())) }
     }
 
     /// Perform a single handshake round.
@@ -43,12 +43,12 @@ impl NonOwningHandshakeMachine {
                             tail: buf.into_vec(),
                         })
                     } else {
-                        RoundResult::Incomplete(NonOwningHandshakeMachine {
+                        RoundResult::Incomplete(HandshakeMachine {
                             state: HandshakeState::Reading(buf),
                             ..self
                         })
                     }),
-                    None => Ok(RoundResult::WouldBlock(NonOwningHandshakeMachine {
+                    None => Ok(RoundResult::WouldBlock(HandshakeMachine {
                         state: HandshakeState::Reading(buf),
                         ..self
                     })),
@@ -60,7 +60,7 @@ impl NonOwningHandshakeMachine {
                     assert!(size > 0);
                     buf.advance(size);
                     Ok(if buf.has_remaining() {
-                        RoundResult::Incomplete(NonOwningHandshakeMachine {
+                        RoundResult::Incomplete(HandshakeMachine {
                             state: HandshakeState::Writing(buf),
                             ..self
                         })
@@ -68,7 +68,7 @@ impl NonOwningHandshakeMachine {
                         RoundResult::StageFinished(StageResult::DoneWriting)
                     })
                 } else {
-                    Ok(RoundResult::WouldBlock(NonOwningHandshakeMachine {
+                    Ok(RoundResult::WouldBlock(HandshakeMachine {
                         state: HandshakeState::Writing(buf),
                         ..self
                     }))
@@ -82,9 +82,9 @@ impl NonOwningHandshakeMachine {
 #[derive(Debug)]
 pub enum RoundResult<Obj> {
     /// Round not done, I/O would block.
-    WouldBlock(NonOwningHandshakeMachine),
+    WouldBlock(HandshakeMachine),
     /// Round done, state unchanged.
-    Incomplete(NonOwningHandshakeMachine),
+    Incomplete(HandshakeMachine),
     /// Stage complete.
     StageFinished(StageResult<Obj>),
 }

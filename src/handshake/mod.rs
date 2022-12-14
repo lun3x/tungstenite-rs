@@ -26,31 +26,27 @@ pub enum HandshakeState {
     Writing(Cursor<Vec<u8>>),
 }
 
-/// A WebSocket handshake.
+/// A WebSocket handshake that doesn't own the underlying stream
 #[derive(Debug)]
-pub struct MidHandshake<Role: HandshakeRole> {
+pub struct NonOwningMidHandshake<Role: HandshakeRole> {
     role: Role,
-    machine: HandshakeMachine<Role::InternalStream>,
+    machine: HandshakeMachine,
 }
 
-impl<Role: HandshakeRole> MidHandshake<Role> {
-    /// Allow access to machine
-    pub fn get_ref(&self) -> &HandshakeMachine<Role::InternalStream> {
-        &self.machine
-    }
-
-    /// Allow mutable access to machine
-    pub fn get_mut(&mut self) -> &mut HandshakeMachine<Role::InternalStream> {
-        &mut self.machine
-    }
-
+impl<Role: HandshakeRole> NonOwningMidHandshake<Role> {
     /// Restarts the handshake process.
-    pub fn handshake(mut self) -> Result<Role::FinalResult, HandshakeError<Role>> {
+    pub fn handshake<S: Read + Write>(
+        mut self,
+        stream: &mut S,
+    ) -> Result<Role::FinalResult, NonOwningHandshakeError<Role>> {
         let mut mach = self.machine;
         loop {
-            mach = match mach.single_round()? {
+            mach = match mach.single_round(stream)? {
                 RoundResult::WouldBlock(m) => {
-                    return Err(HandshakeError::Interrupted(MidHandshake { machine: m, ..self }))
+                    return Err(NonOwningHandshakeError::Interrupted(NonOwningMidHandshake {
+                        machine: m,
+                        ..self
+                    }))
                 }
                 RoundResult::Incomplete(m) => m,
                 RoundResult::StageFinished(s) => match self.role.stage_finished(s)? {
@@ -62,15 +58,94 @@ impl<Role: HandshakeRole> MidHandshake<Role> {
     }
 }
 
-/// A handshake result.
-pub enum HandshakeError<Role: HandshakeRole> {
+/// A handshake result that doesn't own the underlying stream
+pub enum NonOwningHandshakeError<Role: HandshakeRole> {
     /// Handshake was interrupted (would block).
-    Interrupted(MidHandshake<Role>),
+    Interrupted(NonOwningMidHandshake<Role>),
     /// Handshake failed.
     Failure(Error),
 }
 
-impl<Role: HandshakeRole> fmt::Debug for HandshakeError<Role> {
+impl<Role: HandshakeRole> fmt::Debug for NonOwningHandshakeError<Role> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            NonOwningHandshakeError::Interrupted(_) => {
+                write!(f, "NonOwningHandshakeError::Interrupted(...)")
+            }
+            NonOwningHandshakeError::Failure(ref e) => {
+                write!(f, "NonOwningHandshakeError::Failure({:?})", e)
+            }
+        }
+    }
+}
+
+impl<Role: HandshakeRole> fmt::Display for NonOwningHandshakeError<Role> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            NonOwningHandshakeError::Interrupted(_) => {
+                write!(f, "Interrupted handshake (WouldBlock)")
+            }
+            NonOwningHandshakeError::Failure(ref e) => write!(f, "{}", e),
+        }
+    }
+}
+
+impl<Role: HandshakeRole> ErrorTrait for NonOwningHandshakeError<Role> {}
+
+impl<Role: HandshakeRole> From<Error> for NonOwningHandshakeError<Role> {
+    fn from(err: Error) -> Self {
+        NonOwningHandshakeError::Failure(err)
+    }
+}
+
+/// A WebSocket handshake.
+#[derive(Debug)]
+pub struct MidHandshake<Role: HandshakeRole, S> {
+    role: Role,
+    machine: HandshakeMachine,
+    stream: S,
+}
+
+impl<Role: HandshakeRole, S: Read + Write> MidHandshake<Role, S> {
+    /// Restarts the handshake process.
+    pub fn handshake(mut self) -> Result<(Role::FinalResult, S), HandshakeError<Role, S>> {
+        let mut mach = self.machine;
+        loop {
+            mach = match mach.single_round(&mut self.stream)? {
+                RoundResult::WouldBlock(m) => {
+                    return Err(HandshakeError::Interrupted(MidHandshake { machine: m, ..self }))
+                }
+                RoundResult::Incomplete(m) => m,
+                RoundResult::StageFinished(s) => match self.role.stage_finished(s)? {
+                    ProcessingResult::Continue(m) => m,
+                    ProcessingResult::Done(result) => return Ok((result, self.stream)),
+                },
+            }
+        }
+    }
+}
+
+/// A handshake result.
+pub enum HandshakeError<Role: HandshakeRole, S> {
+    /// Handshake was interrupted (would block).
+    Interrupted(MidHandshake<Role, S>),
+    /// Handshake failed.
+    Failure(Error),
+}
+
+impl<Role: HandshakeRole, S> HandshakeError<Role, S> {
+    /// Construct a HandshakeError from a NonOwningHandshakeError and an owned Stream
+    pub fn from_non_owning(e: NonOwningHandshakeError<Role>, stream: S) -> Self {
+        match e {
+            NonOwningHandshakeError::Interrupted(m) => {
+                Self::Interrupted(MidHandshake { stream, role: m.role, machine: m.machine })
+            }
+            NonOwningHandshakeError::Failure(e) => Self::Failure(e),
+        }
+    }
+}
+
+impl<Role: HandshakeRole, S> fmt::Debug for HandshakeError<Role, S> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             HandshakeError::Interrupted(_) => write!(f, "HandshakeError::Interrupted(...)"),
@@ -79,7 +154,7 @@ impl<Role: HandshakeRole> fmt::Debug for HandshakeError<Role> {
     }
 }
 
-impl<Role: HandshakeRole> fmt::Display for HandshakeError<Role> {
+impl<Role: HandshakeRole, S> fmt::Display for HandshakeError<Role, S> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             HandshakeError::Interrupted(_) => write!(f, "Interrupted handshake (WouldBlock)"),
@@ -88,9 +163,9 @@ impl<Role: HandshakeRole> fmt::Display for HandshakeError<Role> {
     }
 }
 
-impl<Role: HandshakeRole> ErrorTrait for HandshakeError<Role> {}
+impl<Role: HandshakeRole, S> ErrorTrait for HandshakeError<Role, S> {}
 
-impl<Role: HandshakeRole> From<Error> for HandshakeError<Role> {
+impl<Role: HandshakeRole, S> From<Error> for HandshakeError<Role, S> {
     fn from(err: Error) -> Self {
         HandshakeError::Failure(err)
     }
@@ -101,21 +176,19 @@ pub trait HandshakeRole {
     #[doc(hidden)]
     type IncomingData: TryParse;
     #[doc(hidden)]
-    type InternalStream: Read + Write;
-    #[doc(hidden)]
     type FinalResult;
     #[doc(hidden)]
     fn stage_finished(
         &mut self,
-        finish: StageResult<Self::IncomingData, Self::InternalStream>,
-    ) -> Result<ProcessingResult<Self::InternalStream, Self::FinalResult>, Error>;
+        finish: StageResult<Self::IncomingData>,
+    ) -> Result<ProcessingResult<Self::FinalResult>, Error>;
 }
 
 /// Stage processing result.
 #[doc(hidden)]
 #[derive(Debug)]
-pub enum ProcessingResult<Stream, FinalResult> {
-    Continue(HandshakeMachine<Stream>),
+pub enum ProcessingResult<FinalResult> {
+    Continue(HandshakeMachine),
     Done(FinalResult),
 }
 
