@@ -97,6 +97,11 @@ pub struct MidHandshake<Role: HandshakeRole, S> {
 }
 
 impl<Role: HandshakeRole, S: Read + Write> MidHandshake<Role, S> {
+    /// Creates an owning MidHandshake from a NonOwningMidHandshake
+    pub fn from_non_owning(handshake: NonOwningMidHandshake<Role>, stream: S) -> Self {
+        Self { role: handshake.role, machine: handshake.machine, stream }
+    }
+
     /// Restarts the handshake process.
     pub fn handshake(mut self) -> Result<(Role::FinalResult, S), HandshakeError<Role, S>> {
         let mut mach = self.machine;

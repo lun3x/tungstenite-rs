@@ -35,39 +35,7 @@ pub struct ClientHandshake {
 
 impl ClientHandshake {
     /// Initiate a client handshake.
-    pub fn start<S: Read + Write>(
-        stream: S,
-        request: Request,
-        config: Option<WebSocketConfig>,
-    ) -> Result<MidHandshake<Self, S>> {
-        if request.method() != http::Method::GET {
-            return Err(Error::Protocol(ProtocolError::WrongHttpMethod));
-        }
-
-        if request.version() < http::Version::HTTP_11 {
-            return Err(Error::Protocol(ProtocolError::WrongHttpVersion));
-        }
-
-        // Check the URI scheme: only ws or wss are supported
-        let _ = crate::client::uri_mode(request.uri())?;
-
-        // Convert and verify the `http::Request` and turn it into the request as per RFC.
-        // Also extract the key from it (it must be present in a correct request).
-        let (request, key) = generate_request(request)?;
-
-        let machine = HandshakeMachine::start_write(request);
-
-        let client = {
-            let accept_key = derive_accept_key(key.as_ref());
-            ClientHandshake { verify_data: VerifyData { accept_key }, config }
-        };
-
-        trace!("Client handshake initiated.");
-        Ok(MidHandshake { role: client, machine, stream })
-    }
-
-    /// TODO
-    pub fn non_owning_start(
+    pub fn start(
         request: Request,
         config: Option<WebSocketConfig>,
     ) -> Result<NonOwningMidHandshake<Self>> {
@@ -95,6 +63,15 @@ impl ClientHandshake {
 
         trace!("Client handshake initiated.");
         Ok(NonOwningMidHandshake { role: client, machine })
+    }
+
+    /// Initiate a client handshake.
+    pub fn start_with<S: Read + Write>(
+        request: Request,
+        config: Option<WebSocketConfig>,
+        stream: S,
+    ) -> Result<MidHandshake<Self, S>> {
+        ClientHandshake::start(request, config).map(|m| MidHandshake::from_non_owning(m, stream))
     }
 }
 

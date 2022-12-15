@@ -155,17 +155,18 @@ pub fn uri_mode(uri: &Uri) -> Result<Mode> {
 /// Any stream supporting `Read + Write` will do.
 pub fn client_with_config<Stream, Req>(
     request: Req,
-    mut stream: Stream,
+    stream: Stream,
     config: Option<WebSocketConfig>,
 ) -> StdResult<(WebSocket<Stream>, Response), HandshakeError<ClientHandshake, Stream>>
 where
     Stream: Read + Write,
     Req: IntoClientRequest,
 {
-    match client_context_with_config(request, &mut stream, config) {
-        Ok((context, resp)) => Ok((WebSocket::from_context(stream, context), resp)),
-        Err(e) => Err(HandshakeError::from_non_owning(e, stream)),
-    }
+    ClientHandshake::start_with(request.into_client_request()?, config, stream)?.handshake().map(
+        |((config, tail, resp), stream)| {
+            (WebSocket::from_partially_read(stream, tail, Role::Client, config), resp)
+        },
+    )
 }
 
 /// Do the client handshake over the given stream given a web socket configuration. Passing `None`
@@ -183,11 +184,11 @@ where
     Stream: Read + Write,
     Req: IntoClientRequest,
 {
-    ClientHandshake::non_owning_start(request.into_client_request()?, config)?
-        .handshake(stream)
-        .map(|(config, tail, resp)| {
+    ClientHandshake::start(request.into_client_request()?, config)?.handshake(stream).map(
+        |(config, tail, resp)| {
             (WebSocketContext::from_partially_read(tail, Role::Client, config), resp)
-        })
+        },
+    )
 }
 
 /// Do the client handshake over the given stream.
