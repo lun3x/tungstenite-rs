@@ -4,7 +4,6 @@ use std::io::{Cursor, Read, Write};
 
 use crate::{
     error::{Error, ProtocolError, Result},
-    handshake::HandshakeState,
     util::NonBlockingResult,
     ReadBuffer,
 };
@@ -102,4 +101,13 @@ pub enum StageResult<Obj> {
 pub trait TryParse: Sized {
     /// Return Ok(None) if incomplete, Err on syntax error.
     fn try_parse(data: &[u8]) -> Result<Option<(usize, Self)>>;
+}
+
+/// The handshake state.
+#[derive(Debug)]
+enum HandshakeState {
+    /// Reading data from the peer.
+    Reading(ReadBuffer),
+    /// Sending data to the peer.
+    Writing(Cursor<Vec<u8>>),
 }
