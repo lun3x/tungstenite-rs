@@ -163,7 +163,7 @@ mod encryption {
     }
 }
 
-type TlsHandshakeError<S> = HandshakeError<ClientHandshake<MaybeTlsStream<S>>>;
+type TlsHandshakeError<S> = HandshakeError<ClientHandshake, MaybeTlsStream<S>>;
 
 /// Creates a WebSocket handshake from a request and a stream,
 /// upgrading the stream to TLS if required.
