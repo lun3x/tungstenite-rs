@@ -92,8 +92,8 @@ pub fn create_response_with_body<T>(
     Ok(create_parts(request)?.body(generate_body())?)
 }
 
-// Assumes that this is a valid response
-fn write_response<T>(mut w: impl io::Write, response: &HttpResponse<T>) -> Result<()> {
+/// Write `response` to the stream `w`.
+pub fn write_response<T>(mut w: impl io::Write, response: &HttpResponse<T>) -> Result<()> {
     writeln!(
         w,
         "{version:?} {status}\r",
@@ -205,7 +205,7 @@ pub struct ServerHandshake<C> {
 
 impl<C: Callback> ServerHandshake<C> {
     /// Start server handshake. `callback` specifies a custom callback which the user can pass to
-    /// the handshake, this callback will be called when the a websocket client connnects to the
+    /// the handshake, this callback will be called when the a websocket client connects to the
     /// server, you can specify the callback if you want to add additional header to the client
     /// upon join based on the incoming headers.
     pub fn start<S: Read + Write>(
