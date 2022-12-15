@@ -26,7 +26,7 @@ pub enum Connector {
     Rustls(std::sync::Arc<rustls::ClientConfig>),
 }
 
-pub mod encryption {
+mod encryption {
     #[cfg(feature = "native-tls")]
     pub mod native_tls {
         use native_tls_crate::{HandshakeError as TlsHandshakeError, TlsConnector};
