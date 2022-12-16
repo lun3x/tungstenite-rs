@@ -170,7 +170,9 @@ impl<Stream: Read + Write> WebSocket<Stream> {
     pub fn read_message(&mut self) -> Result<Message> {
         self.context.read_message(&mut self.socket)
     }
+}
 
+impl<Stream: Write> WebSocket<Stream> {
     /// Send a message to stream, if possible.
     ///
     /// WebSocket will buffer a configurable number of messages at a time, except to reply to Ping
@@ -333,7 +335,7 @@ impl WebSocketContext {
     /// most recent pong frame is sent if multiple pong frames are queued.
     pub fn write_message<Stream>(&mut self, stream: &mut Stream, message: Message) -> Result<()>
     where
-        Stream: Read + Write,
+        Stream: Write,
     {
         // When terminated, return AlreadyClosed.
         self.state.check_active()?;
@@ -375,7 +377,7 @@ impl WebSocketContext {
     /// Flush the pending send queue.
     pub fn write_pending<Stream>(&mut self, stream: &mut Stream) -> Result<()>
     where
-        Stream: Read + Write,
+        Stream: Write,
     {
         // First, make sure we have no pending frame sending.
         self.frame.write_pending(stream)?;
@@ -418,7 +420,7 @@ impl WebSocketContext {
     /// the same as calling `write(Message::Close(..))`.
     pub fn close<Stream>(&mut self, stream: &mut Stream, code: Option<CloseFrame>) -> Result<()>
     where
-        Stream: Read + Write,
+        Stream: Write,
     {
         if let WebSocketState::Active = self.state {
             self.state = WebSocketState::ClosedByUs;
@@ -600,7 +602,7 @@ impl WebSocketContext {
     /// Send a single pending frame.
     fn send_one_frame<Stream>(&mut self, stream: &mut Stream, mut frame: Frame) -> Result<()>
     where
-        Stream: Read + Write,
+        Stream: Write,
     {
         match self.role {
             Role::Server => {}
