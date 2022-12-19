@@ -31,7 +31,7 @@ impl HandshakeMachine {
         self,
         stream: &mut Stream,
     ) -> Result<RoundResult<Obj>> {
-        trace!("Doing handshake round.");
+        trace!("Doing handshake round in state {:?}.", self.state);
         match self.state {
             HandshakeState::Reading(mut buf) => {
                 let read = buf.read_from(stream).no_block()?;
@@ -46,12 +46,10 @@ impl HandshakeMachine {
                     } else {
                         RoundResult::Incomplete(HandshakeMachine {
                             state: HandshakeState::Reading(buf),
-                            ..self
                         })
                     }),
                     None => Ok(RoundResult::WouldBlock(HandshakeMachine {
                         state: HandshakeState::Reading(buf),
-                        ..self
                     })),
                 }
             }
@@ -63,7 +61,6 @@ impl HandshakeMachine {
                     Ok(if buf.has_remaining() {
                         RoundResult::Incomplete(HandshakeMachine {
                             state: HandshakeState::Writing(buf),
-                            ..self
                         })
                     } else {
                         RoundResult::StageFinished(StageResult::DoneWriting)
@@ -71,7 +68,6 @@ impl HandshakeMachine {
                 } else {
                     Ok(RoundResult::WouldBlock(HandshakeMachine {
                         state: HandshakeState::Writing(buf),
-                        ..self
                     }))
                 }
             }
