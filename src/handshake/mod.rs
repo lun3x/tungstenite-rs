@@ -11,6 +11,7 @@ use std::{
     io::{Read, Write},
 };
 
+use log::trace;
 use sha1::{Digest, Sha1};
 
 use self::machine::{HandshakeMachine, RoundResult, StageResult, TryParse};
@@ -33,12 +34,16 @@ impl<Role: HandshakeRole> NonOwningMidHandshake<Role> {
         loop {
             mach = match mach.single_round(stream)? {
                 RoundResult::WouldBlock(m) => {
+                    trace!("RoundResult::WouldBlock");
                     return Err(NonOwningHandshakeError::Interrupted(NonOwningMidHandshake {
                         machine: m,
                         ..self
-                    }))
+                    }));
                 }
-                RoundResult::Incomplete(m) => m,
+                RoundResult::Incomplete(m) => {
+                    trace!("RoundResult::Incomplete");
+                    m
+                }
                 RoundResult::StageFinished(s) => match self.role.stage_finished(s)? {
                     ProcessingResult::Continue(m) => m,
                     ProcessingResult::Done(result) => return Ok(result),

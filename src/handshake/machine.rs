@@ -31,7 +31,7 @@ impl HandshakeMachine {
         self,
         stream: &mut Stream,
     ) -> Result<RoundResult<Obj>> {
-        trace!("Doing handshake round in state {:?}.", self.state);
+        trace!("Doing handshake round.");
         match self.state {
             HandshakeState::Reading(mut buf) => {
                 let read = buf.read_from(stream).no_block()?;
