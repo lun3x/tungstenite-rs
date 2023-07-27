@@ -185,7 +185,7 @@ impl Message {
         Message::Text(string.into())
     }
 
-    /// Create a new binary WebSocket message by converting to Vec<u8>.
+    /// Create a new binary WebSocket message by converting to `Vec<u8>`.
     pub fn binary<B>(bin: B) -> Message
     where
         B: Into<Vec<u8>>,
@@ -213,7 +213,7 @@ impl Message {
         matches!(*self, Message::Pong(_))
     }
 
-    /// Indicates whether a message ia s close message.
+    /// Indicates whether a message is a close message.
     pub fn is_close(&self) -> bool {
         matches!(*self, Message::Close(_))
     }

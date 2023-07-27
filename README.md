@@ -14,11 +14,11 @@ fn main () {
         spawn (move || {
             let mut websocket = accept(stream.unwrap()).unwrap();
             loop {
-                let msg = websocket.read_message().unwrap();
+                let msg = websocket.read().unwrap();
 
                 // We do not want to send back ping/pong messages.
                 if msg.is_binary() || msg.is_text() {
-                    websocket.write_message(msg).unwrap();
+                    websocket.send(msg).unwrap();
                 }
             }
         });
@@ -36,7 +36,7 @@ take a look at [`tokio-tungstenite`](https://github.com/snapview/tokio-tungsteni
 [![MIT licensed](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE-MIT)
 [![Apache-2.0 licensed](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE-APACHE)
 [![Crates.io](https://img.shields.io/crates/v/tungstenite.svg?maxAge=2592000)](https://crates.io/crates/tungstenite)
-[![Build Status](https://travis-ci.org/snapview/tungstenite-rs.svg?branch=master)](https://travis-ci.org/snapview/tungstenite-rs)
+[![Build Status](https://github.com/snapview/tungstenite-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/snapview/tungstenite-rs/actions)
 
 [Documentation](https://docs.rs/tungstenite)
 

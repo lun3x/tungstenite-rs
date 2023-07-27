@@ -258,7 +258,7 @@ impl TryParse for Response {
 impl<'h, 'b: 'h> FromHttparse<httparse::Response<'h, 'b>> for Response {
     fn from_httparse(raw: httparse::Response<'h, 'b>) -> Result<Self> {
         if raw.version.expect("Bug: no HTTP version") < /*1.*/1 {
-            return Err(Error::Protocol(ProtocolError::WrongHttpMethod));
+            return Err(Error::Protocol(ProtocolError::WrongHttpVersion));
         }
 
         let headers = HeaderMap::from_httparse(raw.headers)?;
@@ -279,7 +279,7 @@ pub fn generate_key() -> String {
     // a base64-encoded (see Section 4 of [RFC4648]) value that,
     // when decoded, is 16 bytes in length (RFC 6455)
     let r: [u8; 16] = rand::random();
-    base64::encode(&r)
+    data_encoding::BASE64.encode(&r)
 }
 
 #[cfg(test)]
