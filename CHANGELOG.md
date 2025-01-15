@@ -1,11 +1,28 @@
-<<<<<<< HEAD
-# 0.20.1
+# 0.26.1
 
-=======
-# Unreleased
+- Fix/revert unsoundness that could lead to UB with dodgy `Read` stream implementations.
+
+# 0.26.0
+- Simplify `Message` to use `Bytes` payload directly with simpler `Utf8Bytes` for text.
+- Change `CloseFrame` to use `Utf8Bytes` for `reason`.
+- Re-export `Bytes`.
+
+# 0.25.0
+
+- New `Payload` type for `Message` that allows sending messages with a payload that can be cheaply cloned (`Bytes`).
+  Long standing [issue](https://github.com/snapview/tungstenite-rs/issues/96) solved!
+- Add `WebSocketConfig::read_buffer_size` default 128 KiB.
+- Make `WebSocketConfig` non-exhaustive & add builder style construction fns.
+- Remove deprecated `WebSocketConfig::max_send_queue`.
+- Trim spaces on `Sec-WebSocket-Protocol` header.
+- Eliminate data copies when reading complete messages & optimise read buffer. Improves performance.
+- Update `thiserror` to `2`.
+
+# 0.24.0
 
 - Raised MSRV to 1.63 to match `tokio-tungstenite`.
 - Connecting to WSS URL without TLS features specified results in a better error.
+- Handshake will now flush after completion to be safe (works better with buffered streams).
 
 # 0.23.0
 
@@ -25,7 +42,6 @@
 - Update `http` to `1.0.0`.
 
 # 0.20.1
->>>>>>> master
 - Fixes [CVE-2023-43669](https://github.com/snapview/tungstenite-rs/pull/379).
 
 # 0.20.0

@@ -69,7 +69,9 @@ impl HandshakeMachine {
                             state: HandshakeState::Writing(buf),
                         })
                     } else {
-                        RoundResult::StageFinished(StageResult::DoneWriting)
+                        RoundResult::Incomplete(HandshakeMachine {
+                            state: HandshakeState::Flushing,
+                        })
                     })
                 } else {
                     Ok(RoundResult::WouldBlock(HandshakeMachine {
@@ -77,6 +79,12 @@ impl HandshakeMachine {
                     }))
                 }
             }
+            HandshakeState::Flushing => Ok(match stream.flush().no_block()? {
+                Some(()) => RoundResult::StageFinished(StageResult::DoneWriting),
+                None => {
+                    RoundResult::WouldBlock(HandshakeMachine { state: HandshakeState::Flushing })
+                }
+            }),
         }
     }
 }
@@ -115,6 +123,8 @@ enum HandshakeState {
     Reading(ReadBuffer, AttackCheck),
     /// Sending data to the peer.
     Writing(Cursor<Vec<u8>>),
+    /// Flushing data to ensure that all intermediately buffered contents reach their destination.
+    Flushing,
 }
 
 /// Attack mitigation. Contains counters needed to prevent DoS attacks
