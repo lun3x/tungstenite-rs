@@ -149,7 +149,7 @@ impl<Role: HandshakeRole, S> fmt::Debug for HandshakeError<Role, S> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             HandshakeError::Interrupted(_) => write!(f, "HandshakeError::Interrupted(...)"),
-            HandshakeError::Failure(ref e) => write!(f, "HandshakeError::Failure({:?})", e),
+            HandshakeError::Failure(ref e) => write!(f, "HandshakeError::Failure({e:?})"),
         }
     }
 }
@@ -158,7 +158,7 @@ impl<Role: HandshakeRole, S> fmt::Display for HandshakeError<Role, S> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             HandshakeError::Interrupted(_) => write!(f, "Interrupted handshake (WouldBlock)"),
-            HandshakeError::Failure(ref e) => write!(f, "{}", e),
+            HandshakeError::Failure(ref e) => write!(f, "{e}"),
         }
     }
 }
